@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,79 +11,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { TaskModal } from "@/components/TaskModal";
 import { 
   Plus, 
   Search, 
   Filter, 
   Calendar,
-  Clock,
-  MessageSquare,
+  FolderOpen,
   Tag,
-  FolderOpen
+  MoreHorizontal,
+  Edit,
+  Trash2
 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
-
-interface Task {
-  id: string;
-  title: string;
-  description: string | null;
-  status: 'pending' | 'in_progress' | 'completed';
-  priority: 'low' | 'medium' | 'high';
-  due_date: string | null;
-  project_id: string;
-  projects: {
-    name: string;
-  };
-  task_tags: {
-    tags: {
-      name: string;
-    };
-  }[];
-}
-
-interface Project {
-  id: string;
-  name: string;
-}
+import { useTasks } from "@/hooks/useTasks";
+import { useProjects } from "@/hooks/useProjects";
+import { useTags } from "@/hooks/useTags";
 
 export default function Dashboard() {
   const [showTaskModal, setShowTaskModal] = useState(false);
-
-  // Fetch tasks
-  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
-    queryKey: ['tasks'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select(`
-          *,
-          projects!inner(name),
-          task_tags(
-            tags(name)
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      return data as Task[];
-    }
+  const [editingTask, setEditingTask] = useState<any>(null);
+  const [filters, setFilters] = useState({
+    status: 'all',
+    project_id: 'all',
+    search: '',
   });
 
-  // Fetch projects for filters
-  const { data: projects = [] } = useQuery({
-    queryKey: ['projects'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('id, name')
-        .order('name');
-
-      if (error) throw error;
-      return data as Project[];
-    }
-  });
+  const { tasks, isLoading: tasksLoading, deleteTask } = useTasks(filters);
+  const { projects } = useProjects();
+  const { tags } = useTags();
 
   // Calculate statistics
   const totalTasks = tasks.length;
@@ -95,10 +56,10 @@ export default function Dashboard() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-task-pending/10 text-task-pending';
-      case 'in_progress': return 'bg-task-progress/10 text-task-progress';
-      case 'completed': return 'bg-task-completed/10 text-task-completed';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
+      case 'in_progress': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
+      case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
+      default: return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
     }
   };
 
@@ -127,6 +88,26 @@ export default function Dashboard() {
       case 'low': return 'Baixa';
       default: return priority;
     }
+  };
+
+  const handleEditTask = (task: any) => {
+    setEditingTask(task);
+    setShowTaskModal(true);
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    if (confirm('Tem certeza que deseja excluir esta tarefa?')) {
+      try {
+        await deleteTask.mutateAsync(taskId);
+      } catch (error) {
+        console.error('Error deleting task:', error);
+      }
+    }
+  };
+
+  const handleCloseModal = () => {
+    setShowTaskModal(false);
+    setEditingTask(null);
   };
 
   if (tasksLoading) {
@@ -224,12 +205,20 @@ export default function Dashboard() {
             <div className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Buscar tarefas..." className="pl-10" />
+                <Input 
+                  placeholder="Buscar tarefas..." 
+                  className="pl-10"
+                  value={filters.search}
+                  onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                />
               </div>
             </div>
             
             <div className="grid grid-cols-2 gap-4 md:flex md:space-x-4">
-              <Select>
+              <Select 
+                value={filters.status} 
+                onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
+              >
                 <SelectTrigger className="w-full md:w-[150px]">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
@@ -241,7 +230,10 @@ export default function Dashboard() {
                 </SelectContent>
               </Select>
               
-              <Select>
+              <Select 
+                value={filters.project_id} 
+                onValueChange={(value) => setFilters(prev => ({ ...prev, project_id: value }))}
+              >
                 <SelectTrigger className="w-full md:w-[150px]">
                   <SelectValue placeholder="Projeto" />
                 </SelectTrigger>
@@ -252,18 +244,6 @@ export default function Dashboard() {
                       {project.name}
                     </SelectItem>
                   ))}
-                </SelectContent>
-              </Select>
-              
-              <Select>
-                <SelectTrigger className="w-full md:w-[150px]">
-                  <SelectValue placeholder="Prioridade" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover">
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="high">Alta</SelectItem>
-                  <SelectItem value="medium">Média</SelectItem>
-                  <SelectItem value="low">Baixa</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -283,15 +263,39 @@ export default function Dashboard() {
           </div>
         ) : (
           tasks.map((task) => (
-            <Card key={task.id} className="hover:shadow-md transition-shadow cursor-pointer">
+            <Card key={task.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="pb-4">
                 <div className="flex items-start justify-between">
-                  <Badge variant="secondary" className={getStatusColor(task.status)}>
-                    {getStatusLabel(task.status)}
-                  </Badge>
-                  <Badge variant="outline" className={getPriorityColor(task.priority)}>
-                    {getPriorityLabel(task.priority)}
-                  </Badge>
+                  <div className="space-y-2 flex-1">
+                    <div className="flex items-center justify-between">
+                      <Badge variant="secondary" className={getStatusColor(task.status)}>
+                        {getStatusLabel(task.status)}
+                      </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="bg-popover">
+                          <DropdownMenuItem onClick={() => handleEditTask(task)}>
+                            <Edit className="mr-2 h-4 w-4" />
+                            Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => handleDeleteTask(task.id)}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    <Badge variant="outline" className={getPriorityColor(task.priority)}>
+                      {getPriorityLabel(task.priority)}
+                    </Badge>
+                  </div>
                 </div>
                 <CardTitle className="text-lg">{task.title}</CardTitle>
                 <CardDescription>
@@ -315,23 +319,22 @@ export default function Dashboard() {
                   <div className="flex items-center space-x-2">
                     <Tag className="h-4 w-4 text-muted-foreground" />
                     {task.task_tags.length > 0 ? (
-                      task.task_tags.slice(0, 2).map((taskTag, index) => (
-                        <Badge key={index} variant="outline">
-                          {taskTag.tags.name}
-                        </Badge>
-                      ))
+                      <div className="flex flex-wrap gap-1">
+                        {task.task_tags.slice(0, 2).map((taskTag, index) => (
+                          <Badge key={index} variant="outline" className="text-xs">
+                            {taskTag.tags.name}
+                          </Badge>
+                        ))}
+                        {task.task_tags.length > 2 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{task.task_tags.length - 2}
+                          </Badge>
+                        )}
+                      </div>
                     ) : (
                       <span className="text-xs text-muted-foreground">Nenhuma tag</span>
                     )}
-                    {task.task_tags.length > 2 && (
-                      <Badge variant="outline">
-                        +{task.task_tags.length - 2}
-                      </Badge>
-                    )}
                   </div>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <MessageSquare className="h-4 w-4" />
-                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -341,7 +344,8 @@ export default function Dashboard() {
 
       <TaskModal 
         open={showTaskModal} 
-        onClose={() => setShowTaskModal(false)} 
+        onClose={handleCloseModal}
+        task={editingTask}
       />
     </div>
   );
