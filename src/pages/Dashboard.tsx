@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,9 +22,123 @@ import {
   Tag,
   FolderOpen
 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+
+interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  status: 'pending' | 'in_progress' | 'completed';
+  priority: 'low' | 'medium' | 'high';
+  due_date: string | null;
+  project_id: string;
+  projects: {
+    name: string;
+  };
+  task_tags: {
+    tags: {
+      name: string;
+    };
+  }[];
+}
+
+interface Project {
+  id: string;
+  name: string;
+}
 
 export default function Dashboard() {
   const [showTaskModal, setShowTaskModal] = useState(false);
+
+  // Fetch tasks
+  const { data: tasks = [], isLoading: tasksLoading } = useQuery({
+    queryKey: ['tasks'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('tasks')
+        .select(`
+          *,
+          projects!inner(name),
+          task_tags(
+            tags(name)
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as Task[];
+    }
+  });
+
+  // Fetch projects for filters
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name')
+        .order('name');
+
+      if (error) throw error;
+      return data as Project[];
+    }
+  });
+
+  // Calculate statistics
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter(task => task.status === 'completed').length;
+  const inProgressTasks = tasks.filter(task => task.status === 'in_progress').length;
+  const overdueTasks = tasks.filter(task => 
+    task.due_date && new Date(task.due_date) < new Date() && task.status !== 'completed'
+  ).length;
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-task-pending/10 text-task-pending';
+      case 'in_progress': return 'bg-task-progress/10 text-task-progress';
+      case 'completed': return 'bg-task-completed/10 text-task-completed';
+      default: return 'bg-gray-100 text-gray-700';
+    }
+  };
+
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'text-red-600';
+      case 'medium': return 'text-yellow-600';
+      case 'low': return 'text-green-600';
+      default: return 'text-gray-600';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'pending': return 'Pendente';
+      case 'in_progress': return 'Em Progresso';
+      case 'completed': return 'Concluída';
+      default: return status;
+    }
+  };
+
+  const getPriorityLabel = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'Alta';
+      case 'medium': return 'Média';
+      case 'low': return 'Baixa';
+      default: return priority;
+    }
+  };
+
+  if (tasksLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+          <p>Carregando tarefas...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -50,9 +164,9 @@ export default function Dashboard() {
             <div className="h-4 w-4 rounded-full bg-blue-100 dark:bg-blue-900" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">12</div>
+            <div className="text-2xl font-bold">{totalTasks}</div>
             <p className="text-xs text-muted-foreground">
-              +2 desde ontem
+              Total de tarefas
             </p>
           </CardContent>
         </Card>
@@ -63,9 +177,9 @@ export default function Dashboard() {
             <div className="h-4 w-4 rounded-full bg-green-100 dark:bg-green-900" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">8</div>
+            <div className="text-2xl font-bold">{completedTasks}</div>
             <p className="text-xs text-muted-foreground">
-              66.7% do total
+              {totalTasks > 0 ? `${((completedTasks / totalTasks) * 100).toFixed(1)}% do total` : '0% do total'}
             </p>
           </CardContent>
         </Card>
@@ -76,9 +190,9 @@ export default function Dashboard() {
             <div className="h-4 w-4 rounded-full bg-yellow-100 dark:bg-yellow-900" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">3</div>
+            <div className="text-2xl font-bold">{inProgressTasks}</div>
             <p className="text-xs text-muted-foreground">
-              25% do total
+              {totalTasks > 0 ? `${((inProgressTasks / totalTasks) * 100).toFixed(1)}% do total` : '0% do total'}
             </p>
           </CardContent>
         </Card>
@@ -89,9 +203,9 @@ export default function Dashboard() {
             <div className="h-4 w-4 rounded-full bg-red-100 dark:bg-red-900" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">1</div>
+            <div className="text-2xl font-bold">{overdueTasks}</div>
             <p className="text-xs text-muted-foreground">
-              8.3% do total
+              {totalTasks > 0 ? `${((overdueTasks / totalTasks) * 100).toFixed(1)}% do total` : '0% do total'}
             </p>
           </CardContent>
         </Card>
@@ -122,7 +236,7 @@ export default function Dashboard() {
                 <SelectContent className="bg-popover">
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="progress">Em Progresso</SelectItem>
+                  <SelectItem value="in_progress">Em Progresso</SelectItem>
                   <SelectItem value="completed">Concluída</SelectItem>
                 </SelectContent>
               </Select>
@@ -133,8 +247,11 @@ export default function Dashboard() {
                 </SelectTrigger>
                 <SelectContent className="bg-popover">
                   <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="project1">Projeto 1</SelectItem>
-                  <SelectItem value="project2">Projeto 2</SelectItem>
+                  {projects.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               
@@ -149,18 +266,6 @@ export default function Dashboard() {
                   <SelectItem value="low">Baixa</SelectItem>
                 </SelectContent>
               </Select>
-              
-              <Select>
-                <SelectTrigger className="w-full md:w-[150px]">
-                  <SelectValue placeholder="Tags" />
-                </SelectTrigger>
-                <SelectContent className="bg-popover">
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="urgent">Urgente</SelectItem>
-                  <SelectItem value="bug">Bug</SelectItem>
-                  <SelectItem value="feature">Feature</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
         </CardContent>
@@ -168,125 +273,70 @@ export default function Dashboard() {
 
       {/* Lista de Tarefas */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {/* Exemplo de tarefa 1 */}
-        <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <CardHeader className="pb-4">
-            <div className="flex items-start justify-between">
-              <Badge variant="secondary" className="bg-task-pending/10 text-task-pending">
-                Pendente
-              </Badge>
-              <Badge variant="outline" className="text-red-600">
-                Alta
-              </Badge>
-            </div>
-            <CardTitle className="text-lg">Implementar sistema de login</CardTitle>
-            <CardDescription>
-              Criar tela de login com validação e integração com backend
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-              <div className="flex items-center space-x-1">
-                <Calendar className="h-4 w-4" />
-                <span>15/12/2024</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <FolderOpen className="h-4 w-4" />
-                <span>Sistema Web</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Tag className="h-4 w-4 text-muted-foreground" />
-                <Badge variant="outline" size="sm">urgente</Badge>
-                <Badge variant="outline" size="sm">auth</Badge>
-              </div>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <MessageSquare className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Exemplo de tarefa 2 */}
-        <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <CardHeader className="pb-4">
-            <div className="flex items-start justify-between">
-              <Badge variant="secondary" className="bg-task-progress/10 text-task-progress">
-                Em Progresso
-              </Badge>
-              <Badge variant="outline" className="text-yellow-600">
-                Média
-              </Badge>
-            </div>
-            <CardTitle className="text-lg">Design da página inicial</CardTitle>
-            <CardDescription>
-              Criar mockups e protótipos da landing page
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-              <div className="flex items-center space-x-1">
-                <Calendar className="h-4 w-4" />
-                <span>20/12/2024</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <FolderOpen className="h-4 w-4" />
-                <span>Website</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Tag className="h-4 w-4 text-muted-foreground" />
-                <Badge variant="outline" size="sm">design</Badge>
-                <Badge variant="outline" size="sm">ui</Badge>
-              </div>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <MessageSquare className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Exemplo de tarefa 3 */}
-        <Card className="hover:shadow-md transition-shadow cursor-pointer">
-          <CardHeader className="pb-4">
-            <div className="flex items-start justify-between">
-              <Badge variant="secondary" className="bg-task-completed/10 text-task-completed">
-                Concluída
-              </Badge>
-              <Badge variant="outline" className="text-green-600">
-                Baixa
-              </Badge>
-            </div>
-            <CardTitle className="text-lg">Configurar banco de dados</CardTitle>
-            <CardDescription>
-              Configurar PostgreSQL e criar tabelas iniciais
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-              <div className="flex items-center space-x-1">
-                <Calendar className="h-4 w-4" />
-                <span>10/12/2024</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <FolderOpen className="h-4 w-4" />
-                <span>Sistema Web</span>
-              </div>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Tag className="h-4 w-4 text-muted-foreground" />
-                <Badge variant="outline" size="sm">database</Badge>
-                <Badge variant="outline" size="sm">setup</Badge>
-              </div>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <MessageSquare className="h-4 w-4" />
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        {tasks.length === 0 ? (
+          <div className="col-span-full text-center py-12">
+            <p className="text-muted-foreground mb-4">Nenhuma tarefa encontrada</p>
+            <Button onClick={() => setShowTaskModal(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Criar sua primeira tarefa
+            </Button>
+          </div>
+        ) : (
+          tasks.map((task) => (
+            <Card key={task.id} className="hover:shadow-md transition-shadow cursor-pointer">
+              <CardHeader className="pb-4">
+                <div className="flex items-start justify-between">
+                  <Badge variant="secondary" className={getStatusColor(task.status)}>
+                    {getStatusLabel(task.status)}
+                  </Badge>
+                  <Badge variant="outline" className={getPriorityColor(task.priority)}>
+                    {getPriorityLabel(task.priority)}
+                  </Badge>
+                </div>
+                <CardTitle className="text-lg">{task.title}</CardTitle>
+                <CardDescription>
+                  {task.description || 'Sem descrição'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                  {task.due_date && (
+                    <div className="flex items-center space-x-1">
+                      <Calendar className="h-4 w-4" />
+                      <span>{new Date(task.due_date).toLocaleDateString('pt-BR')}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center space-x-1">
+                    <FolderOpen className="h-4 w-4" />
+                    <span>{task.projects.name}</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <Tag className="h-4 w-4 text-muted-foreground" />
+                    {task.task_tags.length > 0 ? (
+                      task.task_tags.slice(0, 2).map((taskTag, index) => (
+                        <Badge key={index} variant="outline">
+                          {taskTag.tags.name}
+                        </Badge>
+                      ))
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Nenhuma tag</span>
+                    )}
+                    {task.task_tags.length > 2 && (
+                      <Badge variant="outline">
+                        +{task.task_tags.length - 2}
+                      </Badge>
+                    )}
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                    <MessageSquare className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
 
       <TaskModal 
