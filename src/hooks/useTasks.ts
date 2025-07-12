@@ -61,7 +61,9 @@ export const useTasks = (filters?: {
         .eq('user_id', user.id);
 
       if (filters?.status && filters.status !== 'all') {
-        query = query.eq('status', filters.status);
+        // Fix: Use correct type assertion
+        const statusValue = filters.status as 'pending' | 'in_progress' | 'completed';
+        query = query.eq('status', statusValue);
       }
 
       if (filters?.project_id && filters.project_id !== 'all') {

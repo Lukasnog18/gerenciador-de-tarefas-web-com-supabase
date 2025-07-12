@@ -2,8 +2,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -11,68 +9,99 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { TaskModal } from "@/components/TaskModal";
+import { TaskCommentsModal } from "@/components/TaskCommentsModal";
 import { 
   Plus, 
   Search, 
   Filter, 
-  Calendar,
-  FolderOpen,
-  Tag,
-  MoreHorizontal,
+  Calendar, 
+  AlertCircle, 
+  CheckCircle, 
+  Clock,
   Edit,
-  Trash2
+  Trash2,
+  MessageSquare
 } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { useTasks } from "@/hooks/useTasks";
 import { useProjects } from "@/hooks/useProjects";
 import { useTags } from "@/hooks/useTags";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 export default function Dashboard() {
-  const [showTaskModal, setShowTaskModal] = useState(false);
-  const [editingTask, setEditingTask] = useState<any>(null);
-  const [filters, setFilters] = useState({
-    status: 'all',
-    project_id: 'all',
-    search: '',
-  });
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [tagFilter, setTagFilter] = useState("all");
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [commentsModalOpen, setCommentsModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<any>(null);
 
-  const { tasks, isLoading: tasksLoading, deleteTask } = useTasks(filters);
   const { projects } = useProjects();
   const { tags } = useTags();
+  const { tasks, isLoading, deleteTask } = useTasks({
+    status: statusFilter,
+    project_id: projectFilter,
+    search: search,
+  });
 
-  // Calculate statistics
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter(task => task.status === 'completed').length;
-  const inProgressTasks = tasks.filter(task => task.status === 'in_progress').length;
-  const overdueTasks = tasks.filter(task => 
+  // Filter tasks by tag if selected
+  const filteredTasks = tagFilter === 'all' 
+    ? tasks 
+    : tasks.filter(task => 
+        task.task_tags.some(tt => tt.tags.id === tagFilter)
+      );
+
+  const pendingTasks = filteredTasks.filter(task => task.status === 'pending');
+  const inProgressTasks = filteredTasks.filter(task => task.status === 'in_progress');
+  const completedTasks = filteredTasks.filter(task => task.status === 'completed');
+
+  const overdueTasks = filteredTasks.filter(task => 
     task.due_date && new Date(task.due_date) < new Date() && task.status !== 'completed'
-  ).length;
+  );
+
+  const handleEditTask = (task: any) => {
+    setSelectedTask(task);
+    setTaskModalOpen(true);
+  };
+
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      await deleteTask.mutateAsync(taskId);
+    } catch (error) {
+      console.error('Error deleting task:', error);
+    }
+  };
+
+  const handleOpenComments = (task: any) => {
+    setSelectedTask(task);
+    setCommentsModalOpen(true);
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200';
-      case 'in_progress': return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
-      case 'completed': return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200';
-      default: return 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300';
+      case 'pending': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+      case 'in_progress': return 'bg-blue-100 text-blue-800 border-blue-200';
+      case 'completed': return 'bg-green-100 text-green-800 border-green-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'text-red-600';
-      case 'medium': return 'text-yellow-600';
-      case 'low': return 'text-green-600';
-      default: return 'text-gray-600';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
+  const getStatusText = (status: string) => {
     switch (status) {
       case 'pending': return 'Pendente';
       case 'in_progress': return 'Em Progresso';
@@ -81,7 +110,16 @@ export default function Dashboard() {
     }
   };
 
-  const getPriorityLabel = (priority: string) => {
+  const getPriorityColor = (priority: string) => {
+    switch (priority) {
+      case 'high': return 'bg-red-100 text-red-800 border-red-200';
+      case 'medium': return 'bg-orange-100 text-orange-800 border-orange-200';
+      case 'low': return 'bg-gray-100 text-gray-800 border-gray-200';
+      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+    }
+  };
+
+  const getPriorityText = (priority: string) => {
     switch (priority) {
       case 'high': return 'Alta';
       case 'medium': return 'Média';
@@ -90,158 +128,146 @@ export default function Dashboard() {
     }
   };
 
-  const handleEditTask = (task: any) => {
-    setEditingTask(task);
-    setShowTaskModal(true);
-  };
-
-  const handleDeleteTask = async (taskId: string) => {
-    if (confirm('Tem certeza que deseja excluir esta tarefa?')) {
-      try {
-        await deleteTask.mutateAsync(taskId);
-      } catch (error) {
-        console.error('Error deleting task:', error);
-      }
-    }
-  };
-
-  const handleCloseModal = () => {
-    setShowTaskModal(false);
-    setEditingTask(null);
-  };
-
-  if (tasksLoading) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-          <p>Carregando tarefas...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-4 text-muted-foreground">Carregando dashboard...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div className="flex flex-col space-y-4 md:flex-row md:items-center md:justify-between md:space-y-0">
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <h1 className="text-3xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground">
-            Gerencie suas tarefas e acompanhe o progresso dos projetos
+            Gerencie suas tarefas e acompanhe o progresso dos seus projetos
           </p>
         </div>
-        <Button onClick={() => setShowTaskModal(true)} className="flex items-center space-x-2">
-          <Plus className="h-4 w-4" />
-          <span>Nova Tarefa</span>
+        
+        <Button onClick={() => {
+          setSelectedTask(null);
+          setTaskModalOpen(true);
+        }}>
+          <Plus className="mr-2 h-4 w-4" />
+          Nova Tarefa
         </Button>
       </div>
 
-      {/* Estatísticas */}
+      {/* Stats Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Tarefas</CardTitle>
-            <div className="h-4 w-4 rounded-full bg-blue-100 dark:bg-blue-900" />
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{totalTasks}</div>
-            <p className="text-xs text-muted-foreground">
-              Total de tarefas
-            </p>
+            <div className="text-2xl font-bold">{filteredTasks.length}</div>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Concluídas</CardTitle>
-            <div className="h-4 w-4 rounded-full bg-green-100 dark:bg-green-900" />
+            <CardTitle className="text-sm font-medium">Pendentes</CardTitle>
+            <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{completedTasks}</div>
-            <p className="text-xs text-muted-foreground">
-              {totalTasks > 0 ? `${((completedTasks / totalTasks) * 100).toFixed(1)}% do total` : '0% do total'}
-            </p>
+            <div className="text-2xl font-bold text-yellow-600">{pendingTasks.length}</div>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Em Progresso</CardTitle>
-            <div className="h-4 w-4 rounded-full bg-yellow-100 dark:bg-yellow-900" />
+            <Clock className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{inProgressTasks}</div>
-            <p className="text-xs text-muted-foreground">
-              {totalTasks > 0 ? `${((inProgressTasks / totalTasks) * 100).toFixed(1)}% do total` : '0% do total'}
-            </p>
+            <div className="text-2xl font-bold text-blue-600">{inProgressTasks.length}</div>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Atrasadas</CardTitle>
-            <div className="h-4 w-4 rounded-full bg-red-100 dark:bg-red-900" />
+            <CardTitle className="text-sm font-medium">Concluídas</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{overdueTasks}</div>
-            <p className="text-xs text-muted-foreground">
-              {totalTasks > 0 ? `${((overdueTasks / totalTasks) * 100).toFixed(1)}% do total` : '0% do total'}
-            </p>
+            <div className="text-2xl font-bold text-green-600">{completedTasks.length}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filtros */}
+      {/* Filters */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
+          <CardTitle className="flex items-center gap-2">
             <Filter className="h-5 w-5" />
-            <span>Filtros</span>
+            Filtros
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex flex-col space-y-4 md:flex-row md:items-center md:space-x-4 md:space-y-0">
-            <div className="flex-1">
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Buscar</label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input 
-                  placeholder="Buscar tarefas..." 
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar tarefas..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                   className="pl-10"
-                  value={filters.search}
-                  onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
                 />
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-4 md:flex md:space-x-4">
-              <Select 
-                value={filters.status} 
-                onValueChange={(value) => setFilters(prev => ({ ...prev, status: value }))}
-              >
-                <SelectTrigger className="w-full md:w-[150px]">
-                  <SelectValue placeholder="Status" />
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger>
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-popover">
-                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="all">Todos os Status</SelectItem>
                   <SelectItem value="pending">Pendente</SelectItem>
                   <SelectItem value="in_progress">Em Progresso</SelectItem>
                   <SelectItem value="completed">Concluída</SelectItem>
                 </SelectContent>
               </Select>
-              
-              <Select 
-                value={filters.project_id} 
-                onValueChange={(value) => setFilters(prev => ({ ...prev, project_id: value }))}
-              >
-                <SelectTrigger className="w-full md:w-[150px]">
-                  <SelectValue placeholder="Projeto" />
+            </div>
+            
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Projeto</label>
+              <Select value={projectFilter} onValueChange={setProjectFilter}>
+                <SelectTrigger>
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="bg-popover">
-                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="all">Todos os Projetos</SelectItem>
                   {projects.map((project) => (
                     <SelectItem key={project.id} value={project.id}>
                       {project.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Tag</label>
+              <Select value={tagFilter} onValueChange={setTagFilter}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-popover">
+                  <SelectItem value="all">Todas as Tags</SelectItem>
+                  {tags.map((tag) => (
+                    <SelectItem key={tag.id} value={tag.id}>
+                      {tag.name}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -251,88 +277,119 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
-      {/* Lista de Tarefas */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {tasks.length === 0 ? (
-          <div className="col-span-full text-center py-12">
-            <p className="text-muted-foreground mb-4">Nenhuma tarefa encontrada</p>
-            <Button onClick={() => setShowTaskModal(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Criar sua primeira tarefa
-            </Button>
-          </div>
+      {/* Overdue Tasks Alert */}
+      {overdueTasks.length > 0 && (
+        <Card className="border-red-200 bg-red-50">
+          <CardHeader>
+            <CardTitle className="text-red-800 flex items-center gap-2">
+              <AlertCircle className="h-5 w-5" />
+              Tarefas Vencidas ({overdueTasks.length})
+            </CardTitle>
+            <CardDescription className="text-red-700">
+              Você possui tarefas que já passaram do prazo. Considere atualizá-las.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
+      {/* Tasks List */}
+      <div className="space-y-6">
+        {filteredTasks.length === 0 ? (
+          <Card>
+            <CardContent className="text-center py-8">
+              <p className="text-muted-foreground">
+                {search || statusFilter !== 'all' || projectFilter !== 'all' || tagFilter !== 'all'
+                  ? 'Nenhuma tarefa encontrada com os filtros aplicados.'
+                  : 'Nenhuma tarefa encontrada. Crie sua primeira tarefa!'}
+              </p>
+            </CardContent>
+          </Card>
         ) : (
-          tasks.map((task) => (
-            <Card key={task.id} className="hover:shadow-md transition-shadow">
-              <CardHeader className="pb-4">
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2 flex-1">
-                    <div className="flex items-center justify-between">
-                      <Badge variant="secondary" className={getStatusColor(task.status)}>
-                        {getStatusLabel(task.status)}
+          filteredTasks.map((task) => (
+            <Card key={task.id} className="transition-shadow hover:shadow-md">
+              <CardContent className="p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 space-y-3">
+                    <div className="flex items-start justify-between">
+                      <h3 className="text-lg font-semibold">{task.title}</h3>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenComments(task)}
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditTask(task)}
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive">
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="bg-background">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Excluir Tarefa</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Tem certeza que deseja excluir a tarefa "{task.title}"? Esta ação não pode ser desfeita.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => handleDeleteTask(task.id)}
+                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                              >
+                                Excluir
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </div>
+                    
+                    {task.description && (
+                      <p className="text-muted-foreground">{task.description}</p>
+                    )}
+                    
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={getStatusColor(task.status)}>
+                        {getStatusText(task.status)}
                       </Badge>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="bg-popover">
-                          <DropdownMenuItem onClick={() => handleEditTask(task)}>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem 
-                            onClick={() => handleDeleteTask(task.id)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      
+                      <Badge className={getPriorityColor(task.priority)}>
+                        {getPriorityText(task.priority)}
+                      </Badge>
+                      
+                      <Badge variant="outline">
+                        {task.projects.name}
+                      </Badge>
+                      
+                      {task.task_tags.map((taskTag) => (
+                        <Badge key={taskTag.tags.id} variant="secondary">
+                          {taskTag.tags.name}
+                        </Badge>
+                      ))}
                     </div>
-                    <Badge variant="outline" className={getPriorityColor(task.priority)}>
-                      {getPriorityLabel(task.priority)}
-                    </Badge>
-                  </div>
-                </div>
-                <CardTitle className="text-lg">{task.title}</CardTitle>
-                <CardDescription>
-                  {task.description || 'Sem descrição'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center space-x-4 text-sm text-muted-foreground">
-                  {task.due_date && (
-                    <div className="flex items-center space-x-1">
-                      <Calendar className="h-4 w-4" />
-                      <span>{new Date(task.due_date).toLocaleDateString('pt-BR')}</span>
-                    </div>
-                  )}
-                  <div className="flex items-center space-x-1">
-                    <FolderOpen className="h-4 w-4" />
-                    <span>{task.projects.name}</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <Tag className="h-4 w-4 text-muted-foreground" />
-                    {task.task_tags.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
-                        {task.task_tags.slice(0, 2).map((taskTag, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {taskTag.tags.name}
-                          </Badge>
-                        ))}
-                        {task.task_tags.length > 2 && (
-                          <Badge variant="outline" className="text-xs">
-                            +{task.task_tags.length - 2}
+                    
+                    {task.due_date && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Calendar className="h-4 w-4" />
+                        <span>
+                          Vencimento: {format(new Date(task.due_date), "dd/MM/yyyy", { locale: ptBR })}
+                        </span>
+                        {new Date(task.due_date) < new Date() && task.status !== 'completed' && (
+                          <Badge variant="destructive" className="ml-2">
+                            Vencida
                           </Badge>
                         )}
                       </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Nenhuma tag</span>
                     )}
                   </div>
                 </div>
@@ -342,10 +399,24 @@ export default function Dashboard() {
         )}
       </div>
 
-      <TaskModal 
-        open={showTaskModal} 
-        onClose={handleCloseModal}
-        task={editingTask}
+      {/* Modals */}
+      <TaskModal
+        open={taskModalOpen}
+        onClose={() => {
+          setTaskModalOpen(false);
+          setSelectedTask(null);
+        }}
+        task={selectedTask}
+      />
+
+      <TaskCommentsModal
+        open={commentsModalOpen}
+        onClose={() => {
+          setCommentsModalOpen(false);
+          setSelectedTask(null);
+        }}
+        taskId={selectedTask?.id || ""}
+        taskTitle={selectedTask?.title || ""}
       />
     </div>
   );
