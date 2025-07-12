@@ -1,135 +1,50 @@
 
-import { useState, useRef } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
-import { User, Upload } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useRef } from 'react';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { toast } from '@/hooks/use-toast';
+import { Loader2, Upload, X } from 'lucide-react';
 
 interface UserSettingsModalProps {
-  open: boolean;
+  isOpen: boolean;
   onClose: () => void;
 }
 
-export function UserSettingsModal({ open, onClose }: UserSettingsModalProps) {
+export const UserSettingsModal = ({ isOpen, onClose }: UserSettingsModalProps) => {
   const { user } = useAuth();
-  const queryClient = useQueryClient();
+  const [loading, setLoading] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [fullName, setFullName] = useState(user?.user_metadata?.full_name || '');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState(user?.user_metadata?.avatar_url || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  const [fullName, setFullName] = useState(user?.user_metadata?.full_name || "");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
-  const updateProfile = useMutation({
-    mutationFn: async (data: { full_name?: string; avatar_url?: string }) => {
-      const { error } = await supabase.auth.updateUser({
-        data: data
-      });
-      if (error) throw error;
-
-      // Also update the profiles table
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ 
-          full_name: data.full_name,
-          avatar_url: data.avatar_url 
-        })
-        .eq('id', user?.id);
-      
-      if (profileError) throw profileError;
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Sucesso',
-        description: 'Perfil atualizado com sucesso!',
-      });
-      queryClient.invalidateQueries({ queryKey: ['profile'] });
-    },
-    onError: (error: any) => {
+  const validateForm = () => {
+    if (!fullName.trim()) {
       toast({
         title: 'Erro',
-        description: error.message || 'Erro ao atualizar perfil',
+        description: 'O nome completo é obrigatório',
         variant: 'destructive',
       });
-    },
-  });
-
-  const updatePassword = useMutation({
-    mutationFn: async (password: string) => {
-      const { error } = await supabase.auth.updateUser({
-        password: password
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast({
-        title: 'Sucesso',
-        description: 'Senha alterada com sucesso!',
-      });
-      setNewPassword("");
-      setConfirmPassword("");
-    },
-    onError: (error: any) => {
-      toast({
-        title: 'Erro',
-        description: error.message || 'Erro ao alterar senha',
-        variant: 'destructive',
-      });
-    },
-  });
-
-  const uploadAvatar = async (file: File): Promise<string> => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user?.id}-${Math.random()}.${fileExt}`;
-    const filePath = `avatars/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file);
-
-    if (uploadError) throw uploadError;
-
-    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    return data.publicUrl;
-  };
-
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      if (file.size > 2 * 1024 * 1024) { // 2MB limit
-        toast({
-          title: 'Erro',
-          description: 'A imagem deve ter no máximo 2MB',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      setAvatarFile(file);
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setAvatarPreview(e.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+      return false;
     }
-  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    if (newPassword && newPassword.length < 6) {
+      toast({
+        title: 'Erro',
+        description: 'A nova senha deve ter pelo menos 6 caracteres',
+        variant: 'destructive',
+      });
+      return false;
+    }
 
     if (newPassword && newPassword !== confirmPassword) {
       toast({
@@ -137,153 +52,292 @@ export function UserSettingsModal({ open, onClose }: UserSettingsModalProps) {
         description: 'As senhas não coincidem',
         variant: 'destructive',
       });
-      return;
+      return false;
     }
 
-    if (newPassword && newPassword.length < 6) {
+    return true;
+  };
+
+  const handleAvatarUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || !user) return;
+
+    // Validar tipo de arquivo
+    if (!file.type.startsWith('image/')) {
       toast({
         title: 'Erro',
-        description: 'A senha deve ter pelo menos 6 caracteres',
+        description: 'Por favor, selecione apenas arquivos de imagem',
         variant: 'destructive',
       });
       return;
     }
 
-    try {
-      let avatarUrl = user?.user_metadata?.avatar_url;
-
-      if (avatarFile) {
-        avatarUrl = await uploadAvatar(avatarFile);
-      }
-
-      await updateProfile.mutateAsync({
-        full_name: fullName || user?.email,
-        avatar_url: avatarUrl,
+    // Validar tamanho do arquivo (máximo 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      toast({
+        title: 'Erro',
+        description: 'A imagem deve ter no máximo 2MB',
+        variant: 'destructive',
       });
+      return;
+    }
 
-      if (newPassword) {
-        await updatePassword.mutateAsync(newPassword);
-      }
+    setUploadingAvatar(true);
 
-      onClose();
-    } catch (error) {
-      console.error('Error updating profile:', error);
+    try {
+      // Criar nome único para o arquivo
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+
+      // Upload do arquivo
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file, {
+          upsert: true
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Obter URL pública
+      const { data } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      setAvatarUrl(data.publicUrl);
+
+      toast({
+        title: 'Sucesso',
+        description: 'Avatar atualizado com sucesso!',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao fazer upload do avatar',
+        variant: 'destructive',
+      });
+    } finally {
+      setUploadingAvatar(false);
     }
   };
 
-  const isLoading = updateProfile.isPending || updatePassword.isPending;
+  const handleRemoveAvatar = async () => {
+    if (!user || !avatarUrl) return;
+
+    try {
+      // Se há um avatar atual, tentar removê-lo do storage
+      if (avatarUrl && avatarUrl.includes('avatars')) {
+        const fileName = avatarUrl.split('/avatars/')[1];
+        if (fileName) {
+          await supabase.storage
+            .from('avatars')
+            .remove([fileName]);
+        }
+      }
+
+      setAvatarUrl('');
+      
+      toast({
+        title: 'Sucesso',
+        description: 'Avatar removido com sucesso!',
+      });
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao remover avatar',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSave = async () => {
+    if (!validateForm()) return;
+
+    setLoading(true);
+
+    try {
+      // Atualizar dados do usuário
+      const updates: any = {
+        data: {
+          full_name: fullName,
+          avatar_url: avatarUrl,
+        }
+      };
+
+      // Se uma nova senha foi fornecida, incluí-la na atualização
+      if (newPassword) {
+        updates.password = newPassword;
+      }
+
+      const { error } = await supabase.auth.updateUser(updates);
+
+      if (error) throw error;
+
+      // Atualizar perfil na tabela profiles
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          full_name: fullName,
+          avatar_url: avatarUrl,
+        })
+        .eq('id', user?.id);
+
+      if (profileError) throw profileError;
+
+      toast({
+        title: 'Sucesso',
+        description: 'Configurações atualizadas com sucesso!',
+      });
+
+      onClose();
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error.message || 'Erro ao atualizar configurações',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] bg-background max-h-[90vh] overflow-y-auto">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Configurações do Usuário</DialogTitle>
-          <DialogDescription>
-            Atualize suas informações pessoais e configurações de conta.
-          </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit}>
-          <div className="grid gap-4 py-4">
-            {/* Avatar Section */}
-            <div className="grid gap-2">
-              <Label>Foto de Perfil</Label>
-              <div className="flex items-center gap-4">
-                <Avatar className="h-16 w-16">
-                  <AvatarImage 
-                    src={avatarPreview || user?.user_metadata?.avatar_url} 
-                    alt="Avatar" 
-                  />
-                  <AvatarFallback className="bg-primary text-primary-foreground">
-                    <User className="h-8 w-8" />
-                  </AvatarFallback>
-                </Avatar>
-                <div className="flex flex-col gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => fileInputRef.current?.click()}
-                  >
-                    <Upload className="h-4 w-4 mr-2" />
-                    Alterar Foto
-                  </Button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarChange}
-                    className="hidden"
-                  />
-                  <span className="text-xs text-muted-foreground">
-                    Máximo 2MB
-                  </span>
-                </div>
-              </div>
+        <div className="space-y-6 py-4">
+          {/* Avatar Section */}
+          <div className="flex flex-col items-center space-y-4">
+            <Avatar className="w-24 h-24">
+              <AvatarImage src={avatarUrl} />
+              <AvatarFallback className="text-lg">
+                {fullName?.split(' ').map(n => n[0]).join('').toUpperCase() || user?.email?.[0].toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingAvatar}
+              >
+                {uploadingAvatar ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Upload className="w-4 h-4 mr-2" />
+                )}
+                Alterar Avatar
+              </Button>
+
+              {avatarUrl && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <X className="w-4 h-4 mr-2" />
+                      Remover
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Remover Avatar</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Tem certeza que deseja remover seu avatar? Esta ação não pode ser desfeita.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleRemoveAvatar}>
+                        Remover
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
             </div>
 
-            {/* Name */}
-            <div className="grid gap-2">
-              <Label htmlFor="fullName">Nome Completo</Label>
-              <Input
-                id="fullName"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Digite seu nome completo"
-              />
-            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarUpload}
+              className="hidden"
+            />
+          </div>
 
-            {/* Email (read-only) */}
-            <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
+          {/* Profile Information */}
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="email">E-mail</Label>
               <Input
                 id="email"
-                value={user?.email || ""}
+                type="email"
+                value={user?.email || ''}
                 disabled
                 className="bg-muted"
               />
             </div>
 
-            {/* Password Section */}
-            <div className="grid gap-2">
-              <Label htmlFor="newPassword">Nova Senha (opcional)</Label>
+            <div>
+              <Label htmlFor="fullName">Nome Completo *</Label>
+              <Input
+                id="fullName"
+                type="text"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                placeholder="Digite seu nome completo"
+              />
+            </div>
+          </div>
+
+          {/* Password Change */}
+          <div className="space-y-4">
+            <h3 className="text-sm font-medium">Alterar Senha</h3>
+            
+            <div>
+              <Label htmlFor="newPassword">Nova Senha</Label>
               <Input
                 id="newPassword"
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Digite a nova senha"
+                placeholder="Digite uma nova senha (opcional)"
               />
             </div>
 
-            <div className="grid gap-2">
-              <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
-              <Input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Confirme a nova senha"
-                disabled={!newPassword}
-              />
-            </div>
+            {newPassword && (
+              <div>
+                <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Confirme a nova senha"
+                />
+              </div>
+            )}
           </div>
+        </div>
 
-          <DialogFooter>
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={onClose}
-              disabled={isLoading}
-            >
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? 'Salvando...' : 'Salvar Alterações'}
-            </Button>
-          </DialogFooter>
-        </form>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={loading}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSave} disabled={loading}>
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                Salvando...
+              </>
+            ) : (
+              'Salvar Alterações'
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
-}
+};
