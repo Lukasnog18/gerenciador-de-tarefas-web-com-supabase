@@ -106,7 +106,7 @@ export function Header() {
       </header>
 
       <UserSettingsModal 
-        open={settingsOpen} 
+        isOpen={settingsOpen} 
         onClose={() => setSettingsOpen(false)} 
       />
     </>

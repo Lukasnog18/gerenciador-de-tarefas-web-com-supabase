@@ -60,6 +60,13 @@ export default function Projects() {
   };
 
   const handleDeleteProject = async (projectId: string) => {
+    const projectTasks = tasks.filter(task => task.project_id === projectId);
+    
+    if (projectTasks.length > 0) {
+      // Mostrar aviso sobre exclusão das tarefas
+      console.log(`Excluindo projeto com ${projectTasks.length} tarefas associadas`);
+    }
+    
     try {
       await deleteProject.mutateAsync(projectId);
     } catch (error) {
@@ -193,7 +200,12 @@ export default function Projects() {
                             <AlertDialogTitle>Excluir Projeto</AlertDialogTitle>
                             <AlertDialogDescription>
                               Tem certeza que deseja excluir o projeto "{project.name}"? 
-                              Todas as tarefas associadas também serão excluídas. Esta ação não pode ser desfeita.
+                              {taskCount > 0 && (
+                                <span className="block mt-2 font-medium text-destructive">
+                                  Atenção: Este projeto possui {taskCount} tarefa(s) associada(s) que também serão excluídas permanentemente.
+                                </span>
+                              )}
+                              Esta ação não pode ser desfeita.
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>

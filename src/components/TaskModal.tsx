@@ -33,6 +33,7 @@ import { useProjects } from "@/hooks/useProjects";
 import { useTasks } from "@/hooks/useTasks";
 import { useTags } from "@/hooks/useTags";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "@/hooks/use-toast";
 
 interface Task {
   id: string;
@@ -66,6 +67,7 @@ export function TaskModal({ open, onClose, task }: TaskModalProps) {
   const [date, setDate] = useState<Date | undefined>();
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [newTagName, setNewTagName] = useState("");
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
 
   const { projects } = useProjects();
   const { createTask, updateTask } = useTasks();
@@ -94,10 +96,33 @@ export function TaskModal({ open, onClose, task }: TaskModalProps) {
       setSelectedTags([]);
     }
     setNewTagName("");
+    setErrors({});
   }, [task, open]);
 
+  const validateForm = () => {
+    const newErrors: {[key: string]: string} = {};
+
+    if (!title.trim()) {
+      newErrors.title = "O título é obrigatório";
+    }
+
+    if (!projectId) {
+      newErrors.project = "Selecione um projeto";
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   const handleCreateTag = async () => {
-    if (!newTagName.trim()) return;
+    if (!newTagName.trim()) {
+      toast({
+        title: 'Erro',
+        description: 'Digite um nome para a tag',
+        variant: 'destructive',
+      });
+      return;
+    }
     
     try {
       const newTag = await createTag.mutateAsync({ name: newTagName.trim() });
@@ -119,13 +144,17 @@ export function TaskModal({ open, onClose, task }: TaskModalProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    if (!validateForm()) {
+      return;
+    }
+
     if (!hasProjects) {
       return;
     }
 
     const taskData = {
-      title,
-      description: description || undefined,
+      title: title.trim(),
+      description: description.trim() || undefined,
       status,
       priority,
       project_id: projectId,
@@ -191,8 +220,11 @@ export function TaskModal({ open, onClose, task }: TaskModalProps) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Digite o título da tarefa"
-                required
+                className={errors.title ? "border-destructive" : ""}
               />
+              {errors.title && (
+                <span className="text-sm text-destructive">{errors.title}</span>
+              )}
             </div>
             
             <div className="grid gap-2">
@@ -209,8 +241,8 @@ export function TaskModal({ open, onClose, task }: TaskModalProps) {
 
             <div className="grid gap-2">
               <Label>Projeto *</Label>
-              <Select value={projectId} onValueChange={setProjectId} required>
-                <SelectTrigger>
+              <Select value={projectId} onValueChange={setProjectId}>
+                <SelectTrigger className={errors.project ? "border-destructive" : ""}>
                   <SelectValue placeholder="Selecione o projeto" />
                 </SelectTrigger>
                 <SelectContent className="bg-popover">
@@ -221,6 +253,9 @@ export function TaskModal({ open, onClose, task }: TaskModalProps) {
                   ))}
                 </SelectContent>
               </Select>
+              {errors.project && (
+                <span className="text-sm text-destructive">{errors.project}</span>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
