@@ -1,8 +1,8 @@
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
+import { usePerformanceMonitor } from '@/hooks/usePerformanceMonitor';
 
 interface Tag {
   id: string;
@@ -20,39 +20,44 @@ interface CreateTagData {
 export const useTags = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { measureOperation } = usePerformanceMonitor();
 
   const { data: tags = [], isLoading } = useQuery({
     queryKey: ['tags', user?.id],
     queryFn: async () => {
-      if (!user?.id) return [];
+      return await measureOperation('tags', 'read', async () => {
+        if (!user?.id) return [];
 
-      const { data, error } = await supabase
-        .from('tags')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name');
+        const { data, error } = await supabase
+          .from('tags')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('name');
 
-      if (error) throw error;
-      return data as Tag[];
+        if (error) throw error;
+        return data as Tag[];
+      });
     },
     enabled: !!user?.id,
   });
 
   const createTag = useMutation({
     mutationFn: async (tagData: CreateTagData) => {
-      if (!user?.id) throw new Error('User not authenticated');
+      return await measureOperation('tags', 'create', async () => {
+        if (!user?.id) throw new Error('User not authenticated');
 
-      const { data, error } = await supabase
-        .from('tags')
-        .insert({
-          ...tagData,
-          user_id: user.id,
-        })
-        .select()
-        .single();
+        const { data, error } = await supabase
+          .from('tags')
+          .insert({
+            ...tagData,
+            user_id: user.id,
+          })
+          .select()
+          .single();
 
-      if (error) throw error;
-      return data;
+        if (error) throw error;
+        return data;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] });
@@ -72,15 +77,17 @@ export const useTags = () => {
 
   const updateTag = useMutation({
     mutationFn: async ({ id, ...updateData }: Partial<Tag> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('tags')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single();
+      return await measureOperation('tags', 'update', async () => {
+        const { data, error } = await supabase
+          .from('tags')
+          .update(updateData)
+          .eq('id', id)
+          .select()
+          .single();
 
-      if (error) throw error;
-      return data;
+        if (error) throw error;
+        return data;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] });
@@ -100,12 +107,14 @@ export const useTags = () => {
 
   const deleteTag = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('tags')
-        .delete()
-        .eq('id', id);
+      return await measureOperation('tags', 'delete', async () => {
+        const { error } = await supabase
+          .from('tags')
+          .delete()
+          .eq('id', id);
 
-      if (error) throw error;
+        if (error) throw error;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tags'] });

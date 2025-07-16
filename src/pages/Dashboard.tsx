@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,6 +41,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { PerformanceTest } from "@/components/PerformanceTest";
 
 export default function Dashboard() {
   const [search, setSearch] = useState("");
@@ -163,6 +163,9 @@ export default function Dashboard() {
           Nova Tarefa
         </Button>
       </div>
+
+      {/* Performance Test Section */}
+      <PerformanceTest />
 
       {/* Filters */}
       <Card>

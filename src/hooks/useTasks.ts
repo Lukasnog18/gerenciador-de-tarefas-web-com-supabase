@@ -1,8 +1,8 @@
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
+import { usePerformanceMonitor } from '@/hooks/usePerformanceMonitor';
 
 interface Task {
   id: string;
@@ -43,76 +43,80 @@ export const useTasks = (filters?: {
 }) => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { measureOperation } = usePerformanceMonitor();
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ['tasks', user?.id, filters],
     queryFn: async () => {
-      if (!user?.id) return [];
+      return await measureOperation('tasks', 'read', async () => {
+        if (!user?.id) return [];
 
-      let query = supabase
-        .from('tasks')
-        .select(`
-          *,
-          projects!inner(name),
-          task_tags(
-            tags(id, name, color)
-          )
-        `)
-        .eq('user_id', user.id);
+        let query = supabase
+          .from('tasks')
+          .select(`
+            *,
+            projects!inner(name),
+            task_tags(
+              tags(id, name, color)
+            )
+          `)
+          .eq('user_id', user.id);
 
-      if (filters?.status && filters.status !== 'all') {
-        // Fix: Use correct type assertion
-        const statusValue = filters.status as 'pending' | 'in_progress' | 'completed';
-        query = query.eq('status', statusValue);
-      }
+        if (filters?.status && filters.status !== 'all') {
+          const statusValue = filters.status as 'pending' | 'in_progress' | 'completed';
+          query = query.eq('status', statusValue);
+        }
 
-      if (filters?.project_id && filters.project_id !== 'all') {
-        query = query.eq('project_id', filters.project_id);
-      }
+        if (filters?.project_id && filters.project_id !== 'all') {
+          query = query.eq('project_id', filters.project_id);
+        }
 
-      if (filters?.search) {
-        query = query.ilike('title', `%${filters.search}%`);
-      }
+        if (filters?.search) {
+          query = query.ilike('title', `%${filters.search}%`);
+        }
 
-      const { data, error } = await query.order('created_at', { ascending: false });
+        const { data, error } = await query.order('created_at', { ascending: false });
 
-      if (error) throw error;
-      return data as Task[];
+        if (error) throw error;
+        return data as Task[];
+      });
     },
     enabled: !!user?.id,
   });
 
   const createTask = useMutation({
     mutationFn: async (taskData: CreateTaskData) => {
-      if (!user?.id) throw new Error('User not authenticated');
+      return await measureOperation('tasks', 'create', async () => {
+        if (!user?.id) throw new Error('User not authenticated');
 
-      const { tag_ids, ...taskFields } = taskData;
+        const { tag_ids, ...taskFields } = taskData;
 
-      const { data: task, error: taskError } = await supabase
-        .from('tasks')
-        .insert({
-          ...taskFields,
-          user_id: user.id,
-        })
-        .select()
-        .single();
+        const { data: task, error: taskError } = await supabase
+          .from('tasks')
+          .insert({
+            ...taskFields,
+            user_id: user.id,
+          })
+          .select()
+          .single();
 
-      if (taskError) throw taskError;
+        if (taskError) throw taskError;
 
-      if (tag_ids && tag_ids.length > 0) {
-        const { error: tagError } = await supabase
-          .from('task_tags')
-          .insert(
-            tag_ids.map(tag_id => ({
-              task_id: task.id,
-              tag_id,
-            }))
-          );
+        if (tag_ids && tag_ids.length > 0) {
+          const { error: tagError } = await supabase
+            .from('task_tags')
+            .insert(
+              tag_ids.map(tag_id => ({
+                task_id: task.id,
+                tag_id,
+              }))
+            );
 
-        if (tagError) throw tagError;
-      }
+          if (tagError) throw tagError;
+        }
 
-      return task;
+        return task;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
@@ -132,29 +136,31 @@ export const useTasks = (filters?: {
 
   const updateTask = useMutation({
     mutationFn: async ({ id, tag_ids, ...updateData }: Partial<CreateTaskData> & { id: string }) => {
-      const { error: taskError } = await supabase
-        .from('tasks')
-        .update(updateData)
-        .eq('id', id);
+      return await measureOperation('tasks', 'update', async () => {
+        const { error: taskError } = await supabase
+          .from('tasks')
+          .update(updateData)
+          .eq('id', id);
 
-      if (taskError) throw taskError;
+        if (taskError) throw taskError;
 
-      if (tag_ids !== undefined) {
-        await supabase.from('task_tags').delete().eq('task_id', id);
+        if (tag_ids !== undefined) {
+          await supabase.from('task_tags').delete().eq('task_id', id);
 
-        if (tag_ids.length > 0) {
-          const { error: tagError } = await supabase
-            .from('task_tags')
-            .insert(
-              tag_ids.map(tag_id => ({
-                task_id: id,
-                tag_id,
-              }))
-            );
+          if (tag_ids.length > 0) {
+            const { error: tagError } = await supabase
+              .from('task_tags')
+              .insert(
+                tag_ids.map(tag_id => ({
+                  task_id: id,
+                  tag_id,
+                }))
+              );
 
-          if (tagError) throw tagError;
+            if (tagError) throw tagError;
+          }
         }
-      }
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });
@@ -174,12 +180,14 @@ export const useTasks = (filters?: {
 
   const deleteTask = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('tasks')
-        .delete()
-        .eq('id', id);
+      return await measureOperation('tasks', 'delete', async () => {
+        const { error } = await supabase
+          .from('tasks')
+          .delete()
+          .eq('id', id);
 
-      if (error) throw error;
+        if (error) throw error;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] });

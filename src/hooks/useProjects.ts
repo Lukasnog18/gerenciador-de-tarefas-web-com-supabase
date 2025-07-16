@@ -1,8 +1,8 @@
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
+import { usePerformanceMonitor } from '@/hooks/usePerformanceMonitor';
 
 interface Project {
   id: string;
@@ -25,46 +25,51 @@ interface CreateProjectData {
 export const useProjects = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
+  const { measureOperation } = usePerformanceMonitor();
 
   const { data: projects = [], isLoading } = useQuery({
     queryKey: ['projects', user?.id],
     queryFn: async () => {
-      if (!user?.id) return [];
+      return await measureOperation('projects', 'read', async () => {
+        if (!user?.id) return [];
 
-      const { data, error } = await supabase
-        .from('projects')
-        .select(`
-          *,
-          tasks!tasks_project_id_fkey(count)
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+        const { data, error } = await supabase
+          .from('projects')
+          .select(`
+            *,
+            tasks!tasks_project_id_fkey(count)
+          `)
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      return data.map(project => ({
-        ...project,
-        task_count: project.tasks?.[0]?.count || 0
-      })) as Project[];
+        return data.map(project => ({
+          ...project,
+          task_count: project.tasks?.[0]?.count || 0
+        })) as Project[];
+      });
     },
     enabled: !!user?.id,
   });
 
   const createProject = useMutation({
     mutationFn: async (projectData: CreateProjectData) => {
-      if (!user?.id) throw new Error('User not authenticated');
+      return await measureOperation('projects', 'create', async () => {
+        if (!user?.id) throw new Error('User not authenticated');
 
-      const { data, error } = await supabase
-        .from('projects')
-        .insert({
-          ...projectData,
-          user_id: user.id,
-        })
-        .select()
-        .single();
+        const { data, error } = await supabase
+          .from('projects')
+          .insert({
+            ...projectData,
+            user_id: user.id,
+          })
+          .select()
+          .single();
 
-      if (error) throw error;
-      return data;
+        if (error) throw error;
+        return data;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
@@ -84,15 +89,17 @@ export const useProjects = () => {
 
   const updateProject = useMutation({
     mutationFn: async ({ id, ...updateData }: Partial<Project> & { id: string }) => {
-      const { data, error } = await supabase
-        .from('projects')
-        .update(updateData)
-        .eq('id', id)
-        .select()
-        .single();
+      return await measureOperation('projects', 'update', async () => {
+        const { data, error } = await supabase
+          .from('projects')
+          .update(updateData)
+          .eq('id', id)
+          .select()
+          .single();
 
-      if (error) throw error;
-      return data;
+        if (error) throw error;
+        return data;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
@@ -112,12 +119,14 @@ export const useProjects = () => {
 
   const deleteProject = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('projects')
-        .delete()
-        .eq('id', id);
+      return await measureOperation('projects', 'delete', async () => {
+        const { error } = await supabase
+          .from('projects')
+          .delete()
+          .eq('id', id);
 
-      if (error) throw error;
+        if (error) throw error;
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects'] });
