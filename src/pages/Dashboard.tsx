@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -160,14 +159,14 @@ export default function Dashboard() {
         </div>
         
         <div className="flex gap-2">
-          <Button 
+          {/* <Button 
             onClick={createSampleData}
             disabled={isCreatingSampleData}
             variant="outline"
           >
             <Database className="mr-2 h-4 w-4" />
             {isCreatingSampleData ? 'Criando...' : 'Dados Exemplo'}
-          </Button>
+          </Button> */}
           <Button onClick={() => {
             setSelectedTask(null);
             setModalOpen(true);
