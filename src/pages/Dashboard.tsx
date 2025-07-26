@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,13 +17,15 @@ import {
   Trash2,
   MessageSquare,
   Filter,
-  X
+  X,
+  Database
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useTasks } from "@/hooks/useTasks";
 import { useProjects } from "@/hooks/useProjects";
 import { useTags } from "@/hooks/useTags";
+import { useSampleData } from "@/hooks/useSampleData";
 import {
   Select,
   SelectContent,
@@ -59,6 +62,7 @@ export default function Dashboard() {
   });
   const { projects } = useProjects();
   const { tags } = useTags();
+  const { createSampleData, isLoading: isCreatingSampleData } = useSampleData();
 
   const filteredTasks = tasks.filter(task => {
     if (selectedTags.length === 0) return true;
@@ -155,13 +159,23 @@ export default function Dashboard() {
           </p>
         </div>
         
-        <Button onClick={() => {
-          setSelectedTask(null);
-          setModalOpen(true);
-        }}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nova Tarefa
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            onClick={createSampleData}
+            disabled={isCreatingSampleData}
+            variant="outline"
+          >
+            <Database className="mr-2 h-4 w-4" />
+            {isCreatingSampleData ? 'Criando...' : 'Dados Exemplo'}
+          </Button>
+          <Button onClick={() => {
+            setSelectedTask(null);
+            setModalOpen(true);
+          }}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nova Tarefa
+          </Button>
+        </div>
       </div>
 
       {/* Performance Test Section - COMMENTED OUT */}
