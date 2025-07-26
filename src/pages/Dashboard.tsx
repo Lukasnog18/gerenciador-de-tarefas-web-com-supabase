@@ -41,7 +41,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { PerformanceTest } from "@/components/PerformanceTest";
+// import { PerformanceTest } from "@/components/PerformanceTest";
 
 export default function Dashboard() {
   const [search, setSearch] = useState("");
@@ -164,8 +164,8 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* Performance Test Section */}
-      <PerformanceTest />
+      {/* Performance Test Section - COMMENTED OUT */}
+      {/* <PerformanceTest /> */}
 
       {/* Filters */}
       <Card>
