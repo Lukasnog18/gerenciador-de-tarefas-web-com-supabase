@@ -36,7 +36,7 @@ interface Project {
   name: string;
   description: string | null;
   due_date: string | null;
-  status: 'active' | 'completed' | 'on_hold' | 'cancelled';
+  status: 'active' | 'completed' | 'archived';
 }
 
 interface ProjectModalProps {
@@ -48,7 +48,7 @@ interface ProjectModalProps {
 export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<'active' | 'completed' | 'on_hold' | 'cancelled'>('active');
+  const [status, setStatus] = useState<'active' | 'completed' | 'archived'>('active');
   const [date, setDate] = useState<Date | undefined>();
   
   const { createProject, updateProject } = useProjects();
@@ -169,8 +169,7 @@ export function ProjectModal({ open, onClose, project }: ProjectModalProps) {
                   <SelectContent className="bg-popover">
                     <SelectItem value="active">Ativo</SelectItem>
                     <SelectItem value="completed">Concluído</SelectItem>
-                    <SelectItem value="on_hold">Em Espera</SelectItem>
-                    <SelectItem value="cancelled">Cancelado</SelectItem>
+                    <SelectItem value="archived">Arquivado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

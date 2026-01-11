@@ -9,7 +9,7 @@ interface Project {
   name: string;
   description: string | null;
   due_date: string | null;
-  status: 'active' | 'completed' | 'on_hold' | 'cancelled';
+  status: 'active' | 'completed' | 'archived';
   created_at: string;
   user_id: string;
   task_count?: number;
@@ -19,7 +19,7 @@ interface CreateProjectData {
   name: string;
   description?: string;
   due_date?: string;
-  status?: 'active' | 'completed' | 'on_hold' | 'cancelled';
+  status?: 'active' | 'completed' | 'archived';
 }
 
 export const useProjects = () => {
