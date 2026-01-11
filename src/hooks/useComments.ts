@@ -36,13 +36,16 @@ export const useComments = (taskId?: string) => {
           .from('comments')
           .select(`
             *,
-            profiles(full_name, email)
+            profiles!comments_user_id_fkey(full_name, email)
           `)
           .eq('task_id', taskId)
           .order('created_at', { ascending: true });
 
         if (error) throw error;
-        return data as Comment[];
+        return data.map(comment => ({
+          ...comment,
+          profiles: comment.profiles || { full_name: null, email: '' }
+        })) as Comment[];
       });
     },
     enabled: !!taskId,

@@ -52,7 +52,7 @@ export const useSampleData = () => {
         {
           name: 'API de Integração',
           description: 'Desenvolvimento de API REST para integração com sistemas terceiros e webhooks.',
-          status: 'on_hold' as const,
+          status: 'archived' as const,
           due_date: '2024-05-20',
         },
       ];
